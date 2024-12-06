@@ -6,8 +6,16 @@ from logger import SimpleLogger
 import json
 from ProcessData import get_vd1_vd0
 from const import data
-from db import establish_db_connection
+from multiprocessing import Pool
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy import create_engine
 
+
+engine = create_engine(
+    "postgresql+psycopg2://postgres:root@localhost/mecwindb",
+    pool_size=10,  
+    max_overflow=5  )
+SessionFactory = scoped_session(sessionmaker(bind=engine))
 
 
 class MqttClient:
@@ -69,26 +77,39 @@ class MqttClient:
                 self.logger.log("VD1", f"{vd1}")
                 self.client.disconnect()
                 print("conection disconnected")
-                
             else:
                 self.logger.log("ERROR", f"Failed to publish message '{vd1}' to topic '{topic1}'. Error code: {result1.rc}")
         except Exception as e:
             self.logger.log("ERROR", f"Error occurred while publishing data: {e}")
 
+
+
+    def establish_worker_session(self):
+      return SessionFactory()
+
+
+    def worker(self ,args):
+       imei, password, data = args
+       session = self.establish_worker_session()
+       clientId = f"d:{imei}$standalonesolarpump$187"
+       userName = f"{imei}$standalonesolarpump$187"
+       vd1, vd0 = get_vd1_vd0(data, imei, session)
+       mqttclient = self.establish_connection(clientId, userName, password)       
+       time.sleep(0.3)
+       if mqttclient and vd0 and vd1:
+           vd0_json = json.dumps(vd0)
+           vd1_json = json.dumps(vd1)
+           topic0 = f"iiot-1/standalonesolarpump/{imei}/data/pub"
+           topic1 = f"iiot-1/standalonesolarpump/{imei}/heartbeat/pub"
+           self.publish_data(mqttclient, topic0, topic1, vd0_json, vd1_json)
+
     def bulk_publish(self):
-        engine, session = establish_db_connection()
-        for imei, password in self.imei_pass.items():
-            clientId = f"d:{imei}$standalonesolarpump$187"
-            userName = f"{imei}$standalonesolarpump$187"
-            vd1 ,vd0 = get_vd1_vd0(self.data , imei ,session)
-            mqttcliet = self.establish_connection(clientId, userName, password)
-            time.sleep(0.3)  
-            if mqttcliet and vd0 and vd1:
-                vd0_json  =json.dumps(vd0)
-                vd1_json  =json.dumps(vd1)
-                topic0 = f"iiot-1/standalonesolarpump/{imei}/data/pub"
-                topic1 = f"iiot-1/standalonesolarpump/{imei}/heartbeat/pub"
-                self.publish_data(mqttcliet, topic0, topic1, vd0_json, vd1_json)
+       task_args = [
+        (imei, password, self.data)
+        for imei, password in self.imei_pass.items()]
+       with Pool(processes=4) as pool: 
+           pool.map(self.worker, task_args)
+       print("All data publishing processes completed.")
 
 
 

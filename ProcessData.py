@@ -2,9 +2,12 @@ from datetime import datetime
 import pytz
 from pvlib1 import calculate_ghi_with_weather_now
 from utils import findlpm
-from db import update_row , create_row, reset_column_values_to_zero, get_column_values_by_imei
+from db import update_row , create_row, reset_column_values_to_zero
 from random import randint
 from const import Statuses
+
+
+
 
 def getTimeandDate():
     ist = pytz.timezone('Asia/Kolkata')  
@@ -40,18 +43,19 @@ def get_vd1_vd0( data ,imei , session ):
       if motordata['cloudy ghi'] < 200:
             runstatus = 1
 
+
       create_value = {
                     "daily_water_discharge": 0 ,
                     "cumulative_water_discharge": 0,
                     "day_run_hours": 0 ,
                     "cumulative_run_hours": 0,
                     "cumulative_energy_generated": 0 ,
-                    "run_status":randint(1, 787)
+                    "run_status":randint(1, 786)
                     }
       values = create_row(session , imei , create_value)
-      if values["run_status"] == 787:
-            reset_column_values_to_zero(session , ["run_status"], imei)
-
+      if values["run_status"] >= 786:
+            reset_column_values_to_zero(session , ["run_status"], )
+            values["run_status"] = 0
       runstatus = Statuses[values["run_status"]]
       if runstatus == 1:
             column_value = {
@@ -127,18 +131,19 @@ def get_vd1_vd0( data ,imei , session ):
                 "PST": 1  
               }
       else: 
-            update_row(session, imei ,{"run_status" : 1})
+            result = update_row(session, imei ,{"run_status" : 1})
+            print(result)
             mqtt_payloadvd1 = {
                 "VD": "1",
                 "TIMESTAMP": f"{timeDate['FORMATEDDATETIME']}",  
                 "DATE": f"{timeDate['RTCDATE']}",   
                 "IMEI":f"{imei}", 
                 "PDKWH1": "0", 
-                "PTOTKWH1": "0",
-                "POPDWD1":"0",  
-                "POPTOTWD1": "0",
-                "PDHR1": "0", 
-                "PTOTHR1": "0",
+                "PTOTKWH1": f"{round(result['cumulative_energy_generated'],3)}",
+                "POPDWD1":f"{round(result['daily_water_discharge'],3)}",  
+                "POPTOTWD1": f"{round(result['cumulative_water_discharge'],3)}",
+                "PDHR1": f"{round(result['day_run_hours'],3)}", 
+                "PTOTHR1": f"{round(result['cumulative_run_hours'],3)}",
                 "POPKW1":"0",                          
                 "MAXINDEX": "0",
                 "INDEX": "0",

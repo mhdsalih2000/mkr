@@ -2,11 +2,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine, MetaData, Table, insert,update
 
 
-
-
-
-
-
 def create_row(session, imei, column_value_map, table_name='pump_data'):
     try:
         metadata = MetaData()
@@ -72,20 +67,19 @@ def update_row(session, imei, column_value_map, table_name='pump_data'):
 
 
 
-def reset_column_values_to_zero(session, columns = ["day_run_hours", "daily_water_discharge"] , condition=None , table_name='pump_data'):
+def reset_column_values_to_zero(session, columns = ["day_run_hours", "daily_water_discharge"] , imei=None , table_name='pump_data'):
     try:
         metadata = MetaData()
         table = Table(table_name, metadata, autoload_with=session.bind)
         for column in columns:
             if column not in table.columns:
                 raise ValueError(f"Column '{column}' does not exist in table '{table_name}'.")
-            
         update_query = table.update()
-        if condition is not None:
+        if imei is not None:
+            condition = table.c.imei == imei
             update_query = update_query.where(condition)
         for column in columns:
             update_query = update_query.values({column: 0})
-
         session.execute(update_query)
         session.commit()
         print(f"Successfully reset columns {columns} to 0 in table '{table_name}'.")
