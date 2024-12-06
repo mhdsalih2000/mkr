@@ -34,7 +34,7 @@ def evening_job():
 
 
 if __name__ == "__main__":
-    schedule.every(5).seconds.do(conditional_job)
+    schedule.every(15).minutes.do(conditional_job)
     schedule.every().day.at("18:00").do(evening_job)
     print("Scheduler started. Press Ctrl+C to exit.")
 
